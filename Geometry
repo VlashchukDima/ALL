@@ -1,0 +1,701 @@
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+
+const double kError = 1e-5;
+const double kRandAngle = 69;
+
+bool equals_(const double& a, const double& b) {
+  return (a - kError < b) && (a + kError > b);
+}
+
+
+
+struct Point {
+ public:
+  double x;
+  double y;
+ public:
+  Point() : x(0), y(0) {}
+
+  Point(double x, double y) : x(x), y(y) {}
+
+  Point(const Point& other) = default;
+
+  Point& operator=(Point other) {
+    swap(other);
+    return *this;
+  }
+
+  void swap(Point& other) {
+    std::swap(x, other.x);
+    std::swap(y, other.y);
+  }
+
+  ~Point() = default;
+
+  void scale(const Point& other, double coefficient) {
+    x = (x - other.x) * coefficient + other.x;
+    y = (y - other.y) * coefficient + other.y;
+  }
+
+  void reflect(const Point& other) {
+    scale(other, -1);
+  }
+
+  template<typename T>
+  void reflect(const T& axis) {
+    double a = axis.pointB.y - axis.pointA.y;
+    double b = axis.pointA.x - axis.pointB.x;
+    double c = -(a * axis.pointA.x + b * axis.pointA.y);
+    double high = (a * x + b * y + c) / (a * a + b * b);
+    x = x + (a * 2 * high);
+    y = y + (b * 2 * high);
+  }
+
+  void rotate(double angle) {
+    double help_x = cos(angle) * x - sin(angle) * y;
+    double help_y = sin(angle) * x + cos(angle) * y;
+    x = help_x;
+    y = help_y;
+  }
+
+  void rotate(const Point& point, double angle) {
+    x -= point.x;
+    y -= point.y;
+    rotate(angle);
+    x += point.x;
+    y += point.y;
+  }
+};
+
+
+
+bool operator==(const Point& left, const Point& right) {
+  return equals_(left.x, right.x) && equals_(left.y, right.y);
+}
+
+bool operator!=(const Point& left, const Point& right) {
+  return !equals_(left.x, right.x) || !equals_(left.y, right.y);
+}
+
+double dist(const Point& left, const Point& right) {
+  return sqrt((left.x - right.x) * (left.x - right.x) + (left.y - right.y) * (left.y - right.y));
+}
+
+Point middle(const Point& left, const Point& right) {
+  Point ans((left.x + right.x) / 2, (left.y + right.y) / 2);
+  return ans;
+}
+
+bool isPointbetwin(const Point& A, const Point& B, const Point& C) {
+  return equals_(dist(B, C), (dist(A, C) + dist(A, B)));
+}
+
+
+
+class Line {
+ public:
+  Point pointA;
+  Point pointB;
+ public:
+  Line() : pointA(0, 0), pointB(0, 0) {}
+
+  Line(const Point& point1, const Point& point2) : pointA(point1), pointB(point2) {}
+
+  Line(double k, double b) : pointA(0, b), pointB(1, k + b) {}
+
+  Line(const Point& point1, double k) : pointA(point1), pointB(point1.x + 1, point1.y + k) {}
+
+  Line(const Line& other) = default;
+
+  Line& operator=(Line other) {
+    swap(other);
+    return *this;
+  }
+
+  void swap(Line other) {
+    std::swap(pointA, other.pointA);
+    std::swap(pointB, other.pointB);
+  }
+
+  ~Line() = default;
+
+  friend bool operator==(const Line& left, const Line& right);
+
+  void rotate(const Point& point, double angle) {
+    pointA.rotate(point, angle);
+    pointB.rotate(point, angle);
+  }
+};
+
+
+
+double vectmult(const Point& A, const Point& B, const Point& C) {
+  return (C.y - A.y) * (B.x - A.x) - (B.y - A.y) * (C.x - A.x);
+}
+
+bool operator==(const Line& left, const Line& right) {
+  return equals_(vectmult(left.pointA, left.pointB, right.pointA),
+                 0) && equals_(vectmult(left.pointA, left.pointB, right.pointB), 0);
+}
+
+bool operator!=(const Line& left, const Line& right) {
+  return !(left == right);
+}
+
+double det(double a11, double a12, double a21, double a22) {
+  return (a11 * a22) - (a12 * a21);
+}
+
+Point solve(double a11, double a12, double b1, double a21, double a22, double b2) {
+  double detcore = det(a11, a12, a21, a22);
+  double detx = det(b1, a12, b2, a22);
+  double dety = det(a11, b1, a21, b2);
+  return Point(detx / detcore, dety / detcore);
+}
+
+Point crossOfLines(const Line& AB, const Line& CD) {
+  double a11 = AB.pointB.y - AB.pointA.y;
+  double a12 = AB.pointA.x - AB.pointB.x;
+  double b1 = AB.pointA.x * AB.pointB.y - AB.pointA.y * AB.pointB.x;
+  double a21 = CD.pointB.y - CD.pointA.y;
+  double a22 = CD.pointA.x - CD.pointB.x;
+  double b2 = CD.pointA.x * CD.pointB.y - CD.pointA.y * CD.pointB.x;
+  return solve(a11, a12, b1, a21, a22, b2);
+}
+
+bool isRayCrossed(const Line& ray, const Point& A, const Point& B) {
+  Point cross = crossOfLines(ray, Line(A, B));
+  return isPointbetwin(cross, A, B) && !isPointbetwin(ray.pointA, cross, ray.pointB);
+}
+
+
+
+struct Shape {
+ public:
+  virtual double perimeter() const = 0;
+
+  virtual double area() const = 0;
+
+  virtual bool operator==(const Shape& another) const = 0;
+
+  virtual bool operator!=(const Shape& another) const = 0;
+
+  virtual bool isCongruentTo(const Shape& another) const = 0;
+
+  virtual bool isSimilarTo(const Shape& another) const = 0;
+
+  virtual bool containsPoint(const Point& point) const = 0;
+
+  virtual void rotate(const Point& center, double angle) = 0;
+
+  virtual void reflect(const Point& center) = 0;
+
+  virtual void reflect(const Line& axis) = 0;
+
+  virtual void scale(const Point& center, double coefficient) = 0;
+
+  virtual ~Shape() = default;
+};
+
+
+
+class Ellipse : public Shape {
+ protected:
+  Point F1;
+  Point F2;
+  double len;
+ public:
+  Ellipse() : F1(0, 0), F2(0, 0), len(0) {}
+
+  Ellipse(const Point& F1, const Point& F2, double len) : F1(F1), F2(F2), len(len) {}
+
+  Ellipse(const Ellipse& other) = default;
+
+  Ellipse& operator=(Ellipse other) {
+    swap(other);
+    return *this;
+  }
+
+  void swap(Ellipse other) {
+    std::swap(F1, other.F1);
+    std::swap(F2, other.F2);
+    std::swap(len, other.len);
+  }
+
+  std::pair<Point, Point> focuses() const {
+    std::pair<Point, Point> ans(F1, F2);
+    return ans;
+  }
+
+  Point center() const {
+    return middle(F1, F2);
+  }
+
+  double eccentricity() const {
+    double a = len / 2;
+    double c = dist(F1, F2) / 2;
+    return c / a;
+  }
+
+  std::pair<Line, Line> directrices() const {
+    double a = len / 2;
+    double c = dist(F1, F2) / 2;
+    double shift = a / (eccentricity() * c);
+    Point mid = center();
+    Point d1((F1.x - mid.x) * shift + mid.x, (F1.x - mid.y) * shift + mid.y);
+    Point d2((F2.x - mid.x) * shift + mid.x, (F2.x - mid.y) * shift + mid.y);
+    Line bigaxes1(F1, F2);
+    Line bigaxes2(F1, F2);
+    bigaxes1.rotate(d1, M_PI_2);
+    bigaxes2.rotate(d2, M_PI_2);
+    std::pair<Line, Line> ans(bigaxes1, bigaxes2);
+    return ans;
+  }
+
+  double perimeter() const final {
+    double a = len / 2;
+    double c = dist(F1, F2) / 2;
+    double b = sqrt(a * a - c * c);
+    double h = ((a - b) / (a + b)) * ((a - b) / (a + b));
+    return (a + b) * M_PI * (1 + (3 * h / (10 + sqrt(4 - 3 * h))));
+  }
+
+  double area() const final {
+    double a = len / 2;
+    double c = dist(F1, F2) / 2;
+    double b = sqrt(a * a - c * c);
+    return a * b * M_PI;
+  }
+
+  bool operator==(const Shape& another) const final {
+    const Ellipse* other = dynamic_cast<const Ellipse*>(&another);
+    if (other == nullptr) return false;
+    return (equals_(len, other->len)) && ((F1 == other->F1 && F2 == other->F2)
+                                          || (F1 == other->F2 && F2 == other->F1));
+  }
+
+  bool operator!=(const Shape& another) const final {
+    return !(*this == another);
+  }
+
+  bool isCongruentTo(const Shape& another) const final {
+    const Ellipse* other = dynamic_cast<const Ellipse*>(&another);
+    if (other == nullptr) return false;
+    double a = len / 2;
+    double c = dist(F1, F2) / 2;
+    double b = sqrt(a * a - c * c);
+    double a1 = other->len / 2;
+    double c1 = dist(other->F1, other->F2) / 2;
+    double b1 = sqrt(a1 * a1 - c1 * c1);
+    return equals_(a, a1) && equals_(b, b1);
+  }
+
+  bool isSimilarTo(const Shape& another) const final {
+    const Ellipse* other = dynamic_cast<const Ellipse*>(&another);
+    if (other == nullptr) return false;
+    double a = len / 2;
+    double c = dist(F1, F2) / 2;
+    double b = sqrt(a * a - c * c);
+    double a1 = other->len / 2;
+    double c1 = dist(other->F1, other->F2) / 2;
+    double b1 = sqrt(a1 * a1 - c1 * c1);
+    return equals_(a * b1, b * a1);
+  }
+
+  bool containsPoint(const Point& point) const final {
+    return (dist(F1, point) + dist(F2, point)) < len;
+  }
+
+  void rotate(const Point& center, double angle) final {
+    angle = angle * M_PI / 180;
+    F1.rotate(center, angle);
+    F2.rotate(center, angle);
+  }
+
+  void reflect(const Point& center) final {
+    F1.reflect(center);
+    F2.reflect(center);
+  }
+
+  void reflect(const Line& axis) final {
+    F1.reflect(axis);
+    F2.reflect(axis);
+  }
+
+  void scale(const Point& center, double coefficient) final {
+    F1.scale(center, coefficient);
+    F2.scale(center, coefficient);
+    len = len * coefficient;
+  }
+};
+
+
+
+class Circle : public Ellipse {
+ public:
+  Circle() = default;
+
+  double radius() const {
+    return len / 2;
+  }
+
+  Circle(Point mid, double rad) : Ellipse(mid, mid, 2 * rad) {}
+
+  Circle(const Circle& other) = default;
+};
+
+
+
+class Polygon : public Shape {
+ protected:
+  std::vector<Point> vertices;
+ public:
+  Polygon(const std::vector<Point>& vertices) : vertices(vertices) {}
+
+  explicit Polygon(std::vector<Point>& vertices) : vertices(vertices) {}
+
+  template<typename... T>
+  Polygon(const Point& point, T&... vertices) : vertices({point, vertices...}) { }
+
+  size_t verticesCount() const {
+    return vertices.size();
+  }
+
+  static bool isAngleBetwinLess(const Line& left, const Line& right) {
+    Point vect1((left.pointA.x - left.pointB.x), (left.pointA.y - left.pointB.y));
+    Point vect2((right.pointB.x - right.pointA.x), (right.pointB.y - right.pointA.y));
+    return (vect1.x * vect2.y - vect1.y * vect2.x) > 0;
+  }
+
+  std::vector<Point> getVertices() const {
+    return vertices;
+  }
+
+  bool isConvex() const {
+    size_t len = vertices.size();
+    Line prev(vertices[len - 2], vertices[len - 1]);
+    Line cur(vertices[len - 1], vertices[0]);
+    Line nxt(vertices[0], vertices[1]);
+    size_t count = 0;
+    while (count < len) {
+      if (isAngleBetwinLess(prev, cur) != isAngleBetwinLess(cur, nxt)) {
+        return false;
+      }
+      prev = cur;
+      cur = nxt;
+      count = count + 1;
+      nxt = Line(vertices[count % len], vertices[(count + 1) % len]);
+    }
+    return true;
+  }
+
+  double perimeter() const final {
+    size_t len = vertices.size();
+    double ans = dist(vertices[len - 1], vertices[0]);
+    for (size_t i = 0; i < vertices.size() - 1; ++i) {
+      ans += dist(vertices[i], vertices[i + 1]);
+    }
+    return ans;
+  }
+
+  double area() const final {
+    size_t len = vertices.size();
+    double ans = vertices[len - 1].x * vertices[0].y - vertices[0].x * vertices[len - 1].y;
+    for (size_t i = 0; i < len - 1; i++) {
+      ans += vertices[i].x * vertices[i + 1].y - vertices[i + 1].x * vertices[i].y;
+    }
+    return fabs(ans / 2);
+  }
+
+  bool operator==(const Shape& another) const final {
+    const Polygon* other = dynamic_cast<const Polygon*>(&another);
+    if (other == nullptr) return false;
+    size_t len = vertices.size();
+    if (len != other->vertices.size()) return false;
+    size_t ans = len;
+    for (size_t i = 0; i < len; ++i) {
+      if (vertices[0] == other->vertices[i]) ans = i;
+    }
+    if (ans == len) return false;
+    if (vertices[1] == other->vertices[(ans + 1) % len]) {
+      for (size_t i = 2; i < len; i++) {
+        if (vertices[i] != other->vertices[(ans + i) % len]) return false;
+      }
+      return true;
+    }
+    if (vertices[1] == other->vertices[(ans - 1) % len]) {
+      for (size_t i = 2; i < vertices.size(); i++) {
+        if (vertices[i] != other->vertices[(ans + len - i) % len]) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  bool operator!=(const Shape& another) const final {
+    return !(*this == another);
+  }
+
+  bool isCongruentTo(const Shape& another) const override {
+    const Polygon* other = dynamic_cast<const Polygon*>(&another);
+    if (other == nullptr) return false;
+    return vertices.size() == other->vertices.size();
+  }
+
+  bool isSimilarTo(const Shape& another) const override {
+    const Polygon* other = dynamic_cast<const Polygon*>(&another);
+    if (other == nullptr) return false;
+    return vertices.size() == other->vertices.size();
+  }
+
+  bool containsPoint(const Point& point) const final {
+    Point help = Point(point.x, 1 + point.y);
+    help.rotate(point, kRandAngle);
+    Line ray(point, help);
+    int count = 0;
+    for (size_t i = 0; i < vertices.size() - 1; i++) {
+      if (isRayCrossed(ray, vertices[i], vertices[i + 1])) count += 1;
+    }
+    if (isRayCrossed(ray, vertices[0], vertices[vertices.size() - 1])) count += 1;
+    return (count % 2) == 1;
+  }
+
+  void rotate(const Point& center, double angle) final {
+    angle = angle * M_PI / 180;
+    for (size_t i = 0; i < vertices.size(); ++i) {
+      vertices[i].rotate(center, angle);
+    }
+  }
+
+  void reflect(const Point& center) final {
+    for (size_t i = 0; i < vertices.size(); ++i) {
+      vertices[i].reflect(center);
+    }
+  }
+
+  void reflect(const Line& axis) final {
+    for (size_t i = 0; i < vertices.size(); ++i) {
+      vertices[i].reflect(axis);
+    }
+  }
+
+  void scale(const Point& center, double coefficient) final {
+    for (size_t i = 0; i < vertices.size(); ++i) {
+      vertices[i].scale(center, coefficient);
+    }
+  }
+};
+
+
+
+bool isorto(const Point& A, const Point& B, const Point& C) {
+  return equals_(0, (A.x - B.x) * (C.x - B.x) + (A.y - B.y) * (C.y - B.y));
+}
+
+
+
+class Rectangle : public Polygon {
+ public:
+  Rectangle(const Point& A, const Point& B, const Point& C, const Point& D) : Polygon(A, B, C, D) {}
+
+  Rectangle(const Rectangle& other) = default;
+
+  Rectangle(const Point& A, const Point& C, double num) : Polygon(A, A, C, C) {
+    double r1 = dist(A, C) / sqrt(num * num + 1);
+    double r2 = r1 * num;
+    if (r1 > r2) {
+      std::swap(r1, r2);
+    }
+    Point B = C;
+    B.scale(A, r1 / dist(A, C));
+    B.rotate(A, atan(r2 / r1));
+    Point D = C;
+    D.scale(A, r2 / dist(A, C));
+    D.rotate(A, -atan(r1 / r2));
+    vertices[1] = B;
+    vertices[3] = D;
+  }
+
+  Point Center() const {
+    return middle(vertices[0], vertices[2]);
+  }
+
+  std::pair<Line, Line> diagonals() const {
+    std::pair<Line, Line> ans(Line(vertices[0], vertices[2]),
+                              Line(vertices[1], vertices[3]));
+    return ans;
+  }
+
+  bool isCongruentTo(const Shape& another) const final {
+    const Rectangle* other = dynamic_cast<const Rectangle*>(&another);
+    if (other == nullptr) return false;
+    if (other->vertices.size() != 4) return false;
+    for (int i = 0; i < 4; i++) {
+      if (!isorto(other->vertices[i % 4], other->vertices[(1 + i) % 4],
+                  other->vertices[(2 + i) % 4])) return false;
+    }
+    double AB = dist(vertices[0], vertices[1]);
+    double BC = dist(vertices[1], vertices[2]);
+    double MN = dist(other->vertices[0], other->vertices[1]);
+    double NK = dist(other->vertices[1], other->vertices[2]);
+    return equals_(AB / BC, MN / NK) || equals_(AB / BC, NK / MN);
+  }
+
+  bool isSimilarTo(const Shape& another) const final {
+    const Rectangle* other = dynamic_cast<const Rectangle*>(&another);
+    if (other == nullptr) return false;
+    if (other->vertices.size() != 4) return false;
+    for (int i = 0; i < 4; i++) {
+      if (!isorto(other->vertices[i % 4], other->vertices[(1 + i) % 4],
+                  other->vertices[(2 + i) % 4])) return false;
+    }
+    double AB = dist(vertices[0], vertices[1]);
+    double BC = dist(vertices[1], vertices[2]);
+    double MN = dist(other->vertices[0], other->vertices[1]);
+    double NK = dist(other->vertices[1], other->vertices[2]);
+    return (equals_(AB, MN) && equals_(BC, NK)) ||
+        (equals_(AB, NK) && equals_(BC, MN));
+  }
+};
+
+
+
+class Square : public Rectangle {
+ public:
+  Square(const Point& A, const Point& C) : Rectangle(A, C, 1) {}
+
+  Circle circumscribedCircle() const {
+    return Circle(Center(), dist(Center(), vertices[0]));
+  }
+
+  Circle inscribedCircle() const {
+    return Circle(Center(), dist(Center(), vertices[0]) / sqrt(2));
+  }
+};
+
+
+
+Line orto(const Point& A, const Point& B, const Point& C) {
+  Line ort(A, Point(A.x + B.x - C.x, A.y + B.y - C.y));
+  ort.rotate(A, M_PI_2);
+  return ort;
+}
+
+Line bissectorline(const Point& A, const Point& B, const Point& C) {
+  Point shiftPoint = B;
+  double coef = 1 / (1 + (dist(B, C) / dist(A, C)));
+  shiftPoint.scale(A, coef);
+  return Line(C, shiftPoint);
+}
+
+
+
+class Triangle : public Polygon {
+ public:
+  Triangle(const Point& A, const Point& B, const Point& C) : Polygon(A, B, C) {}
+  Point centroid() const {
+    return Point((vertices[0].x + vertices[1].x + vertices[2].x) / 3,
+                 (vertices[0].y + vertices[1].y + vertices[2].y) / 3);
+  }
+
+  Point orthocenter() const {
+    Line h1 = orto(vertices[0], vertices[1], vertices[2]);
+    Line h2 = orto(vertices[1], vertices[0], vertices[2]);
+    return crossOfLines(h1, h2);
+  }
+
+  Point ninePointCenter() const {
+    return Point(centroid().x * 0.75 + orthocenter().x * 0.25,
+                 centroid().y * 0.75 + orthocenter().y * 0.25);
+  }
+
+  Point circumcenter() const {
+    return Point(ninePointCenter().x * 2 - orthocenter().x,
+                 ninePointCenter().y * 2 - orthocenter().y);
+  }
+
+  Circle ninePointsCircle() const {
+    double rad = dist(circumcenter(), vertices[0]);
+    return {ninePointCenter(), rad / 2};
+  }
+
+  Line EulerLine() const {
+    return Line(centroid(), orthocenter());
+  }
+
+  Circle circumscribedCircle() const {
+    return Circle(circumcenter(), dist(circumcenter(), vertices[0]));
+  }
+
+  Point inscribedPoint() const {
+    Line l1 = bissectorline(vertices[0], vertices[1], vertices[2]);
+    Line l2 = bissectorline(vertices[1], vertices[2], vertices[0]);
+    return crossOfLines(l1, l2);
+  }
+
+  Circle inscribedCircle() const {
+    Point mid = inscribedPoint();
+    Line rad = orto(mid, vertices[1], vertices[2]);
+    Point touch = crossOfLines(rad, Line(vertices[1], vertices[2]));
+    return Circle(inscribedPoint(), dist(touch, mid));
+  }
+
+  bool isCongruentTo(const Shape& another) const final {
+    const Triangle* other = dynamic_cast<const Triangle*>(&another);
+    if (other == nullptr) return false;
+    if (other->vertices.size() != 3) return false;
+    double a1 = dist(vertices[0], vertices[1]);
+    double b1 = dist(vertices[1], vertices[2]);
+    double c1 = dist(vertices[2], vertices[0]);
+    double a2 = dist(other->vertices[0], other->vertices[1]);
+    double b2 = dist(other->vertices[1], other->vertices[2]);
+    double c2 = dist(other->vertices[2], other->vertices[0]);
+    if (equals_(a1, a2)) {
+      return (equals_(b1, b2) && equals_(c1, c2)) ||
+          (equals_(b1, c2) && equals_(c1, b2));
+    }
+    if (equals_(a1, b2)) {
+      return (equals_(b1, a2) && equals_(c1, c2)) ||
+          (equals_(b1, c2) && equals_(c1, a2));
+    }
+    if (equals_(a1, c2)) {
+      return (equals_(b1, b2) && equals_(c1, a2)) ||
+          (equals_(b1, a2) && equals_(c1, b2));
+    }
+    return false;
+  }
+
+  bool isSimilarTo(const Shape& another) const final {
+    const Triangle* other = dynamic_cast<const Triangle*>(&another);
+    if (other == nullptr) return false;
+    double coefficient = dist(circumcenter(), vertices[0]) / dist(other->circumcenter(), other->vertices[0]);
+    double a1 = dist(vertices[0], vertices[1]);
+    double b1 = dist(vertices[1], vertices[2]);
+    double c1 = dist(vertices[2], vertices[0]);
+    double a2 = dist(other->vertices[0], other->vertices[1]) * coefficient;
+    double b2 = dist(other->vertices[1], other->vertices[2]) * coefficient;
+    double c2 = dist(other->vertices[2], other->vertices[0]) * coefficient;
+    if (equals_(a1, a2)) {
+      return (equals_(b1, b2) && equals_(c1, c2)) ||
+          (equals_(b1, c2) && equals_(c1, b2));
+    }
+    if (equals_(a1, b2)) {
+      return (equals_(b1, a2) && equals_(c1, c2)) ||
+          (equals_(b1, c2) && equals_(c1, a2));
+    }
+    if (equals_(a1, c2)) {
+      return (equals_(b1, b2) && equals_(c1, a2)) ||
+          (equals_(b1, a2) && equals_(c1, b2));
+    }
+    return false;
+  }
+};
